@@ -4,6 +4,7 @@ import { Upload, X, Loader2 } from 'lucide-react'
 
 interface ImageUploadProps {
   onImageUpload: (url: string) => void
+  onImageRemove?: (url: string) => void
   folder?: string
   maxSize?: number
   className?: string
@@ -128,6 +129,36 @@ export default function ImageUpload({
     setError('')
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemove = async (imageUrl: string) => {
+    try {
+      // 从URL中提取文件路径
+      // Supabase公共URL格式: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<file-path>
+      const url = new URL(imageUrl);
+      const pathSegments = url.pathname.split('/');
+      
+      // 找到"public"段的位置，文件路径在它之后
+      const publicIndex = pathSegments.indexOf('public');
+      
+      if (publicIndex !== -1 && pathSegments[publicIndex + 1] === 'images') {
+        // 提取文件路径 (从bucket名称之后的部分)
+        const filePath = pathSegments.slice(publicIndex + 2).join('/');
+        
+        // 从Supabase Storage中删除文件
+        const { error } = await supabase.storage
+          .from('images')
+          .remove([filePath]);
+
+        if (error) throw error;
+        
+        // 通知父组件图片已被删除
+        onImageRemove?.(imageUrl);
+      }
+    } catch (error: any) {
+      console.error('删除图片失败:', error);
+      setError(error.message || '删除图片失败');
     }
   }
 

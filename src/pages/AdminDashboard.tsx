@@ -8,6 +8,7 @@ import {
   updateSecuritySettings,
   setSettingValue
 } from '../lib/settings'
+import PostEditor from '../components/PostEditor'
 import { 
   Edit, 
   Trash2, 
@@ -700,100 +701,20 @@ export default function AdminDashboard() {
 
             {isCreating || editingPost ? (
               <div className="bg-white border rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-medium mb-4">
-                  {isCreating ? '新建文章' : '编辑文章'}
-                </h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">标题</label>
-                    <input
-                      type="text"
-                      value={editingPost.title}
-                      onChange={(e) => setEditingPost({...editingPost, title: e.target.value})}
-                      className="w-full px-3 py-2 border rounded"
-                      placeholder="输入文章标题"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">摘要</label>
-                    <textarea
-                      value={editingPost.excerpt}
-                      onChange={(e) => setEditingPost({...editingPost, excerpt: e.target.value})}
-                      className="w-full px-3 py-2 border rounded"
-                      rows={3}
-                      placeholder="输入文章摘要"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">内容</label>
-                    <textarea
-                      value={editingPost.content}
-                      onChange={(e) => setEditingPost({...editingPost, content: e.target.value})}
-                      className="w-full px-3 py-2 border rounded"
-                      rows={6}
-                      placeholder="输入文章内容（支持Markdown）"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">分类</label>
-                      <select
-                        value={editingPost.category_id}
-                        onChange={(e) => setEditingPost({...editingPost, category_id: e.target.value})}
-                        className="w-full px-3 py-2 border rounded"
-                      >
-                        <option value="">选择分类</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">状态</label>
-                      <select
-                        value={editingPost.status}
-                        onChange={(e) => setEditingPost({...editingPost, status: e.target.value})}
-                        className="w-full px-3 py-2 border rounded"
-                      >
-                        <option value="draft">草稿</option>
-                        <option value="published">已发布</option>
-                        <option value="archived">已归档</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">标签（逗号分隔）</label>
-                    <input
-                      type="text"
-                      value={editingPost.tags?.join(', ')}
-                      onChange={(e) => setEditingPost({...editingPost, tags: e.target.value.split(',').map(tag => tag.trim())})}
-                      className="w-full px-3 py-2 border rounded"
-                      placeholder="例如：技术, React, 教程"
-                    />
-                  </div>
-
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => savePost(editingPost)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                      保存
-                    </button>
-                    <button
-                      onClick={cancelEditing}
-                      className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-                    >
-                      取消
-                    </button>
-                  </div>
+                <PostEditor 
+                  post={editingPost} 
+                  onSave={() => {
+                    loadPosts();
+                    cancelEditing();
+                  }} 
+                />
+                <div className="flex space-x-3 mt-4">
+                  <button
+                    onClick={cancelEditing}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    返回列表
+                  </button>
                 </div>
               </div>
             ) : (

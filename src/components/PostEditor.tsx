@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Save, Calendar } from 'lucide-react'
+import { Save, Calendar, X } from 'lucide-react'
 import ImageUpload from './ImageUpload'
 
 interface PostEditorProps {
@@ -176,16 +176,25 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
           </label>
           <ImageUpload
             onImageUpload={(url) => setCoverImage(url)}
+            onImageRemove={() => setCoverImage('')}
             folder="post-covers"
             className="mb-6"
           />
           {coverImage && (
-            <div className="mt-2">
+            <div className="mt-2 flex items-start">
               <img
                 src={coverImage}
                 alt="封面预览"
                 className="w-32 h-32 object-cover rounded-lg border"
               />
+              <button
+                type="button"
+                onClick={() => setCoverImage('')}
+                className="ml-2 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full transition-colors"
+                title="删除图片"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           )}
         </div>
