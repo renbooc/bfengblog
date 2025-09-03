@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@iflow-mcp/playwright-mcp@0.0.32"]
+    },
+    "server-puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@iflow-mcp/server-puppeteer@0.6.2"],
+      "env": {
+        "PUPPETEER_LAUNCH_OPTIONS": "{}",
+        "ALLOW_DANGEROUS": "false"
+      }
+    },
+    "figma-developer": {
+      "command": "npx",
+      "args": ["-y", "@iflow-mcp/figma-developer-mcp@0.5.0", "--stdio"],
+      "env": {
+        "FIGMA_API_KEY": "your-api-key"
+      }
+    },
+    "spec-workflow-mcp": {
+      "command": "npx",
+      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "--AutoStartDashboard"]
+    }
+  }
+}
