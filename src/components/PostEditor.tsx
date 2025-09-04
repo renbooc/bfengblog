@@ -1,11 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Save, Calendar, X } from 'lucide-react'
+import { processImageUrl } from '../utils/imageHelper'
+import { X, Save, Calendar } from 'lucide-react'
 import ImageUpload from './ImageUpload'
+import RichTextEditor from './RichTextEditor'
 
 interface PostEditorProps {
   post?: any
-  onSave?: () => void
+  onSave?: (postData: any) => void
+}
+
+interface Category {
+  id: string
+  name: string
+  slug: string
 }
 
 export default function PostEditor({ post, onSave }: PostEditorProps) {
@@ -16,11 +24,32 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
   const [status, setStatus] = useState(post?.status || 'draft')
   const [category, setCategory] = useState(post?.category_id || '')
   const [coverImage, setCoverImage] = useState(post?.cover_image || '')
+  const [processedCoverImage, setProcessedCoverImage] = useState('')
   const [publishDate, setPublishDate] = useState(
     post?.published_at ? new Date(post.published_at).toISOString().split('T')[0] : ''
   )
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [categories, setCategories] = useState<Category[]>([])
+  
+  // 调试：打印传入的 post 对象和 cover_image
+  console.log('PostEditor 初始化:', { post, coverImage: post?.cover_image })
+
+  // 处理封面图片URL
+  useEffect(() => {
+    const processImage = async () => {
+      if (coverImage) {
+        console.log('开始处理封面图片URL:', coverImage)
+        const processedUrl = await processImageUrl(coverImage)
+        console.log('处理后的封面图片URL:', processedUrl)
+        setProcessedCoverImage(processedUrl)
+      } else {
+        setProcessedCoverImage('')
+      }
+    }
+    
+    processImage()
+  }, [coverImage])
 
   const generateSlug = (title: string) => {
     return title
@@ -29,6 +58,24 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .trim()
+  }
+
+  useEffect(() => {
+    loadCategories()
+  }, [])
+
+  const loadCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name')
+
+      if (error) throw error
+      setCategories(data || [])
+    } catch (error) {
+      console.error('加载分类失败:', error)
+    }
   }
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,38 +96,44 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
       if (!user) throw new Error('请先登录')
 
       const postData = {
+        id: post?.id,
         title,
         content,
         excerpt,
         slug: slug || generateSlug(title),
         cover_image: coverImage || null,
         status,
-        category_id: category || null,
+        category_id: category ? category : null,
         published_at: status === 'published' 
           ? (publishDate ? new Date(publishDate).toISOString() : new Date().toISOString())
           : null
       }
 
-      if (post) {
-        // 更新文章
-        const { error } = await supabase
-          .from('posts')
-          .update({ ...postData, updated_at: new Date().toISOString() })
-          .eq('id', post.id)
-
-        if (error) throw error
-        setMessage('文章更新成功!')
+      // 如果有 onSave 回调，则调用它（用于 AdminDashboard）
+      if (onSave) {
+        onSave(postData)
+        setMessage('文章保存成功!')
       } else {
-        // 创建新文章
-        const { error } = await supabase
-          .from('posts')
-          .insert([{ ...postData, author_id: user.id }])
+        // 直接保存到数据库（用于独立使用）
+        if (post) {
+          // 更新文章
+          const { error } = await supabase
+            .from('posts')
+            .update({ ...postData, updated_at: new Date().toISOString() })
+            .eq('id', post.id)
 
-        if (error) throw error
-        setMessage('文章创建成功!')
+          if (error) throw error
+          setMessage('文章更新成功!')
+        } else {
+          // 创建新文章
+          const { error } = await supabase
+            .from('posts')
+            .insert([{ ...postData, author_id: user.id }])
+
+          if (error) throw error
+          setMessage('文章创建成功!')
+        }
       }
-
-      onSave?.()
     } catch (error: any) {
       setMessage(error.message)
     } finally {
@@ -159,13 +212,11 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             内容 *
           </label>
-          <textarea
-            required
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={10}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-            placeholder="使用 Markdown 格式编写内容..."
+          <RichTextEditor
+            content={content}
+            onChange={setContent}
+            placeholder="开始编写文章内容..."
+            className="w-full"
           />
         </div>
 
@@ -175,26 +226,82 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
             封面图片
           </label>
           <ImageUpload
-            onImageUpload={(url) => setCoverImage(url)}
-            onImageRemove={() => setCoverImage('')}
+            onImageUpload={(url) => {
+              console.log('图片上传成功，URL:', url)
+              setCoverImage(url)
+            }}
+            onImageRemove={(url) => {
+              console.log('图片删除，URL:', url)
+              setCoverImage('')
+            }}
             folder="post-covers"
             className="mb-6"
           />
           {coverImage && (
-            <div className="mt-2 flex items-start">
-              <img
-                src={coverImage}
-                alt="封面预览"
-                className="w-32 h-32 object-cover rounded-lg border"
-              />
-              <button
-                type="button"
-                onClick={() => setCoverImage('')}
-                className="ml-2 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full transition-colors"
-                title="删除图片"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700 mb-2">当前封面图片预览：</p>
+              <div className="flex items-start">
+                <div className="relative">
+                  <img
+                    src={processedCoverImage || coverImage}
+                    alt="封面预览"
+                    className="w-32 h-32 object-cover rounded-lg border shadow-sm"
+                    onError={(e) => {
+                      console.error('封面图片加载失败:', e)
+                      console.log('失败的图片URL:', processedCoverImage || coverImage)
+                      console.log('原始图片URL:', coverImage)
+                      e.currentTarget.style.display = 'none'
+                      e.currentTarget.parentElement?.classList.add('bg-red-100')
+                    }}
+                    onLoad={() => {
+                      console.log('封面图片加载成功:', processedCoverImage || coverImage)
+                    }}
+                  />
+                  <div className="hidden absolute inset-0 bg-red-100 rounded-lg flex items-center justify-center">
+                    <span className="text-red-600 text-xs text-center p-2">图片加载失败</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCoverImage('')}
+                  className="ml-3 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full transition-colors"
+                  title="删除图片"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="mt-2">
+                <p className="text-xs text-blue-600 font-medium mb-1">原始图片URL:</p>
+                <p className="text-xs text-blue-600 break-all bg-blue-100 p-2 rounded mb-2">{coverImage}</p>
+                {processedCoverImage && processedCoverImage !== coverImage && (
+                  <>
+                    <p className="text-xs text-green-600 font-medium mb-1">处理后图片URL:</p>
+                    <p className="text-xs text-green-600 break-all bg-green-100 p-2 rounded mb-2">{processedCoverImage}</p>
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.open(coverImage, '_blank')
+                    }}
+                    className="text-xs text-blue-500 hover:text-blue-700 underline"
+                  >
+                    打开原始链接
+                  </button>
+                  {processedCoverImage && processedCoverImage !== coverImage && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.open(processedCoverImage, '_blank')
+                      }}
+                      className="text-xs text-green-500 hover:text-green-700 underline"
+                    >
+                      打开处理后链接
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -224,10 +331,12 @@ export default function PostEditor({ post, onSave }: PostEditorProps) {
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">选择分类</option>
-              <option value="technology">技术</option>
-              <option value="life">生活</option>
-              <option value="travel">旅行</option>
+              <option value="">无分类</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
             </select>
           </div>
 

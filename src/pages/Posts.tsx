@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Calendar, User, Eye, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import SearchBar from '../components/SearchBar'
+import { processImageUrl } from '../utils/imageHelper'
 
 export default function Posts() {
   const [posts, setPosts] = useState<any[]>([])
@@ -11,6 +12,7 @@ export default function Posts() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(5)
   const [error, setError] = useState<string | null>(null)
+  const [processedImageUrls, setProcessedImageUrls] = useState<{[key: string]: string}>({})
 
   useEffect(() => {
     loadPosts()
@@ -30,8 +32,23 @@ export default function Posts() {
         .order('published_at', { ascending: false })
 
       if (error) throw error
+      console.log('Posts loadPosts:', data)
       setPosts(data || [])
       setFilteredPosts(data || [])
+      
+      // 处理所有文章的封面图片URL
+      const processedUrls: {[key: string]: string} = {}
+      if (data && data.length > 0) {
+        for (const post of data) {
+          if (post.cover_image) {
+            console.log('Posts 开始处理封面图片URL:', post.cover_image)
+            const processedUrl = await processImageUrl(post.cover_image)
+            console.log('Posts 处理后的封面图片URL:', processedUrl)
+            processedUrls[post.id] = processedUrl
+          }
+        }
+        setProcessedImageUrls(processedUrls)
+      }
     } catch (error: any) {
       console.error('加载文章失败:', error)
       setError(error.message || '加载文章失败，请稍后重试')
@@ -139,11 +156,45 @@ export default function Posts() {
                 {/* 文章封面 - 左侧图片 */}
                 <div className="lg:w-80 flex-shrink-0">
                   {post.cover_image ? (
-                    <img
-                      src={post.cover_image}
-                      alt={post.title}
-                      className="w-full h-48 object-cover rounded-xl shadow-lg"
-                    />
+                    <div className="relative group">
+                      <img
+                        src={processedImageUrls[post.id] || post.cover_image}
+                        alt={post.title}
+                        className="w-full h-48 object-cover rounded-xl shadow-lg transition-opacity duration-300"
+                        onError={(e) => {
+                          console.error('文章列表图片加载失败:', e)
+                          console.log('文章列表失败的图片URL:', processedImageUrls[post.id] || post.cover_image)
+                          console.log('文章列表原始图片URL:', post.cover_image)
+                          e.currentTarget.style.display = 'none'
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                        }}
+                        onLoad={() => {
+                          console.log('文章列表图片加载成功:', processedImageUrls[post.id] || post.cover_image)
+                        }}
+                      />
+                      <div className="hidden w-full h-48 bg-red-100 rounded-xl shadow-lg flex flex-col items-center justify-center">
+                        <svg className="w-12 h-12 text-red-400 mb-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-red-600 text-sm text-center px-2">图片加载失败</span>
+                      </div>
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <button
+                          onClick={() => window.open(post.cover_image, '_blank')}
+                          className="px-3 py-1 bg-white bg-opacity-90 text-gray-800 rounded text-sm hover:bg-opacity-100 transition-all"
+                        >
+                          查看原图
+                        </button>
+                        {processedImageUrls[post.id] && processedImageUrls[post.id] !== post.cover_image && (
+                          <button
+                            onClick={() => window.open(processedImageUrls[post.id], '_blank')}
+                            className="ml-2 px-3 py-1 bg-green-100 bg-opacity-90 text-green-800 rounded text-sm hover:bg-opacity-100 transition-all"
+                          >
+                            查看处理后图片
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   ) : (
                     <div className="w-full h-48 bg-gray-200 rounded-xl shadow-lg flex items-center justify-center">
                       <svg className="w-16 h-16 text-gray-400" fill="currentColor" viewBox="0 0 20 20">

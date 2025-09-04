@@ -129,6 +129,7 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
+      console.log('AdminDashboard loadPosts:', data)
       setPosts(data || [])
     } catch (error) {
       console.error('加载文章失败:', error)
@@ -371,10 +372,12 @@ export default function AdminDashboard() {
   }
 
   const startEditing = (post: any) => {
-    // 确保使用正确的category_id字段，而不是joined的categories对象
+    // 确保使用正确的字段，而不是joined的对象
+    console.log('AdminDashboard startEditing:', { post, cover_image: post?.cover_image })
     setEditingPost({
       ...post,
-      category_id: post.category_id // 使用原始的category_id字段
+      category_id: post.category_id, // 使用原始的category_id字段
+      cover_image: post.cover_image // 确保封面图片字段正确传递
     })
     setIsCreating(false)
   }
@@ -703,9 +706,8 @@ export default function AdminDashboard() {
               <div className="bg-white border rounded-lg p-6 mb-6">
                 <PostEditor 
                   post={editingPost} 
-                  onSave={() => {
-                    loadPosts();
-                    cancelEditing();
+                  onSave={(postData) => {
+                    savePost(postData);
                   }} 
                 />
                 <div className="flex space-x-3 mt-4">

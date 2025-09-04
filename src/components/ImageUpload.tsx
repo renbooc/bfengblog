@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { initializeStorage } from '../utils/storage'
 import { Upload, X, Loader2 } from 'lucide-react'
 
 interface ImageUploadProps {
@@ -12,6 +13,7 @@ interface ImageUploadProps {
 
 export default function ImageUpload({ 
   onImageUpload, 
+  onImageRemove,
   folder = 'blog-images',
   maxSize = 5 * 1024 * 1024, // 5MB
   className = ''
@@ -19,7 +21,23 @@ export default function ImageUpload({
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [error, setError] = useState('')
+  const [bucketInitialized, setBucketInitialized] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 初始化存储桶
+  useEffect(() => {
+    const initStorage = async () => {
+      try {
+        await initializeStorage()
+        setBucketInitialized(true)
+      } catch (error) {
+        console.error('初始化存储失败:', error)
+        setError('存储初始化失败，请刷新页面重试')
+      }
+    }
+
+    initStorage()
+  }, [])
 
   const validateFile = (file: File): boolean => {
     setError('')
@@ -58,6 +76,11 @@ export default function ImageUpload({
   }
 
   const handleUpload = async (file: File) => {
+    if (!bucketInitialized) {
+      setError('存储桶未初始化，请稍候再试')
+      return
+    }
+
     setUploading(true)
     setError('')
 
@@ -70,22 +93,80 @@ export default function ImageUpload({
       const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
       const filePath = `${folder}/${fileName}`
 
+      console.log('开始上传图片:', { fileName, filePath, folder })
+
       // 上传到 Supabase Storage
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError, data } = await supabase.storage
         .from('images')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         })
 
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        console.error('Supabase 上传错误:', uploadError)
+        
+        // 如果存储桶不存在，尝试创建
+        if (uploadError.message.includes('bucket not found') || uploadError.message.includes('The resource was not found')) {
+          console.log('尝试创建存储桶...')
+          const { createStorageBucket } = await import('../utils/storage')
+          await createStorageBucket('images')
+          
+          // 重试上传
+          const { error: retryError, data: retryData } = await supabase.storage
+            .from('images')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false
+            })
+            
+          if (retryError) {
+            console.error('重试上传失败:', retryError)
+            throw retryError
+          }
+          
+          console.log('重试上传成功:', retryData)
+        } else {
+          throw uploadError
+        }
+      }
+
+      console.log('上传成功:', data)
 
       // 获取公开 URL
       const { data: { publicUrl } } = supabase.storage
         .from('images')
         .getPublicUrl(filePath)
 
-      onImageUpload(publicUrl)
+      console.log('获取公开URL:', publicUrl)
+
+      // 验证URL是否可访问
+      try {
+        const response = await fetch(publicUrl, { method: 'HEAD' })
+        console.log('图片URL可访问性检查:', { status: response.status, ok: response.ok })
+        
+        // 如果公开URL不可访问，尝试获取签名URL
+        if (!response.ok) {
+          console.log('公开URL不可访问，尝试获取签名URL')
+          const { data: signedData, error: signedError } = await supabase.storage
+            .from('images')
+            .createSignedUrl(filePath, 3600 * 24 * 7) // 7天有效期
+          
+          if (signedError) {
+            console.error('获取签名URL失败:', signedError)
+            onImageUpload(publicUrl) // 即使签名URL失败，也返回公开URL
+          } else {
+            console.log('获取签名URL成功:', signedData.signedUrl)
+            onImageUpload(signedData.signedUrl)
+          }
+        } else {
+          onImageUpload(publicUrl)
+        }
+      } catch (fetchError) {
+        console.error('图片URL可访问性检查失败:', fetchError)
+        onImageUpload(publicUrl) // 即使检查失败，也返回公开URL
+      }
+      
       setPreviewUrl('')
 
     } catch (error: any) {

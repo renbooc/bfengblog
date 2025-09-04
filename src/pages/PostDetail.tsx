@@ -3,12 +3,15 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import CommentSystem from '../components/CommentSystem'
 import { Calendar, User, ArrowLeft, AlertCircle, Clock } from 'lucide-react'
+import DOMPurify from 'dompurify'
+import { processImageUrl } from '../utils/imageHelper'
 
 export default function PostDetail() {
   const { id } = useParams<{ id: string }>()
   const [post, setPost] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [processedCoverImage, setProcessedCoverImage] = useState('')
 
   useEffect(() => {
     if (id) {
@@ -31,7 +34,16 @@ export default function PostDetail() {
         .single()
 
       if (error) throw error
+      console.log('PostDetail loadPost:', data)
       setPost(data)
+      
+      // 处理封面图片URL
+      if (data?.cover_image) {
+        console.log('PostDetail 开始处理封面图片URL:', data.cover_image)
+        const processedUrl = await processImageUrl(data.cover_image)
+        console.log('PostDetail 处理后的封面图片URL:', processedUrl)
+        setProcessedCoverImage(processedUrl)
+      }
     } catch (error: any) {
       console.error('加载文章详情失败:', error)
       setError(error.message || '文章不存在或加载失败')
@@ -133,11 +145,52 @@ export default function PostDetail() {
 
         {/* 封面图片 */}
         {post.cover_image && (
-          <img
-            src={post.cover_image}
-            alt={post.title}
-            className="w-full h-64 object-cover rounded-xl shadow-lg mb-8"
-          />
+          <div className="mb-8">
+            <div className="relative">
+              <img
+                src={processedCoverImage || post.cover_image}
+                alt={post.title}
+                className="w-full h-64 object-cover rounded-xl shadow-lg"
+                onError={(e) => {
+                  console.error('PostDetail 封面图片加载失败:', e)
+                  console.log('PostDetail 失败的图片URL:', processedCoverImage || post.cover_image)
+                  console.log('PostDetail 原始图片URL:', post.cover_image)
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.parentElement?.classList.add('bg-red-100', 'p-8', 'rounded-xl')
+                }}
+                onLoad={() => {
+                  console.log('PostDetail 封面图片加载成功:', processedCoverImage || post.cover_image)
+                }}
+              />
+              <div className="hidden absolute inset-0 bg-red-100 rounded-xl flex flex-col items-center justify-center">
+                <span className="text-red-600 text-lg font-medium mb-2">图片加载失败</span>
+                <span className="text-red-500 text-sm mb-4">请检查图片链接是否有效</span>
+                <button
+                  onClick={() => window.open(post.cover_image, '_blank')}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                >
+                  尝试直接打开链接
+                </button>
+              </div>
+            </div>
+            <div className="mt-2 text-center">
+              <p className="text-xs text-gray-500">封面图片</p>
+              <button
+                onClick={() => window.open(post.cover_image, '_blank')}
+                className="text-xs text-blue-500 hover:text-blue-700 underline mt-1"
+              >
+                查看原图
+              </button>
+              {processedCoverImage && processedCoverImage !== post.cover_image && (
+                <button
+                  onClick={() => window.open(processedCoverImage, '_blank')}
+                  className="text-xs text-green-500 hover:text-green-700 underline mt-1 ml-2"
+                >
+                  查看处理后图片
+                </button>
+              )}
+            </div>
+          </div>
         )}
 
         {/* 摘要 */}
@@ -152,7 +205,12 @@ export default function PostDetail() {
       <article className="prose prose-lg max-w-none">
         <div 
           className="text-gray-800 leading-8"
-          dangerouslySetInnerHTML={{ __html: post.content }}
+          dangerouslySetInnerHTML={{ 
+            __html: DOMPurify.sanitize(post.content, {
+              ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'a', 'img', 'br', 'hr'],
+              ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'title']
+            })
+          }}
         />
       </article>
 
